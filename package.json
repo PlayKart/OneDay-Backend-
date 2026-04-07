@@ -12,5 +12,6 @@
         "express": "^4.22.1",
         "google-auth-library": "^9.15.1",
         "openai": "^4.104.0"
+        "@supabase/supabase-js": "^2.39.0"
     }
 }

@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const rateLimit = require("express-rate-limit");
 const { OAuth2Client } = require("google-auth-library");
 const { createClient } = require("@supabase/supabase-js");
 
@@ -21,24 +22,24 @@ const supabase = createClient(
 const client = new OAuth2Client(CLIENT_ID);
 
 // ==============================
-// ✅ MIDDLEWARE
+// 🛡️ MIDDLEWARE
 // ==============================
 app.use(cors());
 app.use(bodyParser.json());
 
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30
+});
+app.use(limiter);
+
 // ==============================
-// 🧠 COACH PERSONALITY
+// 🧠 COACH
 // ==============================
 const COACH = `
 You are a high-performance personal growth coach.
-
-- Short, sharp, powerful
-- Mix discipline + motivation
-- Never long paragraphs
-
-Push when strong
-Support when low
-Call out excuses
+Short, sharp, powerful.
+Push hard. No excuses.
 `;
 
 // ==============================
@@ -57,7 +58,7 @@ async function verifyUser(req) {
 }
 
 // ==============================
-// 🔥 XP SYSTEM
+// 🔥 XP + STREAK SYSTEM
 // ==============================
 function calculateLevel(xp) {
   return Math.floor(xp / 100) + 1;
@@ -101,7 +102,7 @@ function updateProgress(user) {
 }
 
 // ==============================
-// 🧠 MEMORY BUILDER
+// 🧠 MEMORY
 // ==============================
 function buildMemory(user) {
   const last = user.reflections?.slice(-5) || [];
@@ -111,25 +112,22 @@ User: ${user.name}
 Streak: ${user.streak}
 XP: ${user.xp}
 
-Habits:
-${JSON.stringify(user.habits || [])}
-
 Reflections:
 ${last.map(r => "- " + r.text).join("\n")}
 `;
 }
 
 // ==============================
-// 🧠 MOOD SYSTEM
+// 🧠 MOOD
 // ==============================
 function moodInstruction(user) {
   const last = user.reflections?.slice(-1)[0];
   if (!last) return "";
 
   switch (last.mood) {
-    case "stressed": return "User stressed → calm tone";
-    case "low": return "User low → supportive";
-    case "happy": return "User strong → push harder";
+    case "stressed": return "User stressed → calm";
+    case "low": return "User low → support";
+    case "happy": return "User strong → push";
     default: return "";
   }
 }
@@ -142,7 +140,7 @@ app.get("/", (req, res) => {
 });
 
 // ==============================
-// 🔐 GOOGLE LOGIN
+// 🔐 LOGIN
 // ==============================
 app.post("/google-login", async (req, res) => {
   try {
@@ -155,13 +153,13 @@ app.post("/google-login", async (req, res) => {
 
     const payload = ticket.getPayload();
 
-    const { data: user, error } = await supabase
+    const { data: user } = await supabase
       .from("users")
       .select("*")
       .eq("email", payload.email)
       .single();
 
-    if (error || !user) {
+    if (!user) {
       await supabase.from("users").insert([
         {
           email: payload.email,
@@ -180,26 +178,43 @@ app.post("/google-login", async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ error: "Login failed" });
   }
 });
 
 // ==============================
-// 📥 GET USER
+// 📥 GET USER (WITH AUTO FREEZE)
 // ==============================
 app.get("/user", async (req, res) => {
   try {
     const payload = await verifyUser(req);
 
-    const { data, error } = await supabase
+    const { data: user } = await supabase
       .from("users")
       .select("*")
       .eq("email", payload.email)
       .single();
 
-    if (error) throw error;
+    // 🔥 AUTO FREEZE
+    const last = user.lastActiveDate
+      ? new Date(user.lastActiveDate)
+      : null;
 
-    res.json(data);
+    if (last) {
+      const diff = (Date.now() - last.getTime()) / (1000 * 60 * 60 * 24);
+
+      if (diff >= 2) {
+        const freezeUntil = new Date();
+        freezeUntil.setDate(freezeUntil.getDate() + 2);
+
+        await supabase
+          .from("users")
+          .update({ freeze_until: freezeUntil })
+          .eq("email", payload.email);
+      }
+    }
+
+    res.json(user);
 
   } catch (err) {
     console.error(err);
@@ -208,23 +223,112 @@ app.get("/user", async (req, res) => {
 });
 
 // ==============================
-// 🧠 AI CHAT WITH MEMORY
+// 📥 HABITS
+// ==============================
+app.get("/habits", async (req, res) => {
+  try {
+    const payload = await verifyUser(req);
+
+    const { data } = await supabase
+      .from("habits")
+      .select("*")
+      .eq("user_id", payload.email);
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch habits" });
+  }
+});
+
+// ==============================
+// ➕ ADD HABIT
+// ==============================
+app.post("/habit", async (req, res) => {
+  try {
+    const payload = await verifyUser(req);
+    const { name } = req.body;
+
+    await supabase.from("habits").insert([
+      { name, user_id: payload.email }
+    ]);
+
+    res.json({ success: true });
+
+  } catch (err) {
+    res.status(500).json({ error: "Add habit failed" });
+  }
+});
+
+// ==============================
+// ✅ COMPLETE HABIT
+// ==============================
+app.post("/complete", async (req, res) => {
+  try {
+    const payload = await verifyUser(req);
+    const { habit_id } = req.body;
+
+    const today = new Date().toISOString().split("T")[0];
+
+    await supabase.from("completions").insert([
+      { habit_id, user_id: payload.email, date: today }
+    ]);
+
+    const { data: user } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", payload.email)
+      .single();
+
+    const updated = updateProgress(user);
+
+    await supabase
+      .from("users")
+      .update(updated)
+      .eq("email", payload.email);
+
+    res.json({ success: true });
+
+  } catch (err) {
+    res.status(500).json({ error: "Complete failed" });
+  }
+});
+
+// ==============================
+// ❄️ FREEZE
+// ==============================
+app.post("/freeze", async (req, res) => {
+  try {
+    const payload = await verifyUser(req);
+    const { days } = req.body;
+
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+
+    await supabase
+      .from("users")
+      .update({ freeze_until: date })
+      .eq("email", payload.email);
+
+    res.json({ success: true });
+
+  } catch (err) {
+    res.status(500).json({ error: "Freeze failed" });
+  }
+});
+
+// ==============================
+// 🧠 CHAT
 // ==============================
 app.post("/chat", async (req, res) => {
   try {
     const payload = await verifyUser(req);
     const { message } = req.body;
 
-    // 🔥 Save user message
     await supabase.from("chats").insert([
-      {
-        user_id: payload.email,
-        role: "user",
-        message
-      }
+      { user_id: payload.email, role: "user", message }
     ]);
 
-    // 🧠 Get last 10 messages
     const { data: history } = await supabase
       .from("chats")
       .select("role, message")
@@ -232,61 +336,51 @@ app.post("/chat", async (req, res) => {
       .order("created_at", { ascending: false })
       .limit(10);
 
-    const messages = (history || []).reverse().map(m => ({
-      role: m.role,
-      content: m.message
-    }));
-
-    // 🧠 Get user data
     const { data: user } = await supabase
       .from("users")
       .select("*")
       .eq("email", payload.email)
       .single();
 
-    const memory = buildMemory(user);
-    const mood = moodInstruction(user);
+    const messages = (history || []).reverse().map(m => ({
+      role: m.role,
+      content: m.message
+    }));
 
-    // 🤖 AI CALL
     const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: COACH },
-          { role: "system", content: memory },
-          { role: "system", content: mood },
+          { role: "system", content: buildMemory(user) },
+          { role: "system", content: moodInstruction(user) },
           ...messages
         ]
       })
     });
 
     const data = await aiRes.json();
-    const reply = data.choices?.[0]?.message?.content || "No response";
+    const reply = data?.choices?.[0]?.message?.content || "Try again";
 
-    // 🔥 Save AI reply
     await supabase.from("chats").insert([
-      {
-        user_id: payload.email,
-        role: "assistant",
-        message: reply
-      }
+      { user_id: payload.email, role: "assistant", message: reply }
     ]);
 
     res.json({ reply });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "AI failed" });
+    res.status(500).json({ error: "Chat failed" });
   }
 });
 
 // ==============================
-// 🚀 START SERVER
+// 🚀 START
 // ==============================
 app.listen(3000, () => {
   console.log("Server running on port 3000 🚀");

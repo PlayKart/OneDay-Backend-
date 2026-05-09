@@ -676,7 +676,7 @@ If streak < 7:
     );
 
     const aiData = await aiRes.json();
-
+console.log("OPENAI RESPONSE:", aiData);
     const reply =
       aiData?.choices?.[0]?.message?.content ||
       "Stay consistent.";

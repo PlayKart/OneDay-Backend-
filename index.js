@@ -715,7 +715,7 @@ If streak < 7:
         },
         body: JSON.stringify({
           model:
-            "meta-llama/llama-3.1-8b-instruct:free",
+            "openai/gpt-3.5-turbo",
           messages
         })
       }

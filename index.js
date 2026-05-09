@@ -712,15 +712,22 @@ Make the user obsessed with self improvement and daily execution.
 `;
 
     const messages = [
-      {
-        role: "system",
-        content: systemPrompt
-      },
-      ...orderedHistory.map(chat => ({
-        role: chat.role,
-        content: chat.message
-      }))
-    ];
+  {
+    role: "system",
+    content: systemPrompt
+  },
+  ...orderedHistory.map(chat => ({
+    role: chat.role === "assistant"
+      ? "assistant"
+      : "user",
+    content: chat.message
+  })),
+  {
+    role: "user",
+    content: message
+  }
+];
+    
 
     // ==============================
     // OPENROUTER API

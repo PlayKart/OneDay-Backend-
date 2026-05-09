@@ -676,6 +676,7 @@ If streak < 7:
     );
 
     const aiData = await aiRes.json();
+    console.log(JSON.stringify(aiData, null, 2));
 console.log("OPENAI RESPONSE:", aiData);
     const reply =
       aiData?.choices?.[0]?.message?.content ||

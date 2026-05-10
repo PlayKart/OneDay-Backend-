@@ -331,10 +331,20 @@ app.get("/api/habits", verifyUser, async (req, res) => {
 
     const result =
       (habits || []).map(h => ({
+
         id: h.id,
         name: h.name,
+
+        // NEW FIELDS
+        repeatType:
+          h.repeat_type,
+
+        customDays:
+          h.custom_days,
+
         completedToday:
           completedSet.has(h.id)
+
       }));
 
     return res.json(result);
@@ -358,7 +368,13 @@ app.post("/api/habit", verifyUser, async (req, res) => {
   try {
 
     const { uid } = req.user;
-    const { name } = req.body;
+
+    // NEW FIELDS
+    const {
+      name,
+      repeatType,
+      customDays
+    } = req.body;
 
     if (!name || !name.trim()) {
 
@@ -373,6 +389,14 @@ app.post("/api/habit", verifyUser, async (req, res) => {
         .insert([{
           userId: uid,
           name: name.trim(),
+
+          // NEW DATABASE FIELDS
+          repeat_type:
+            repeatType || "every_day",
+
+          custom_days:
+            customDays || [],
+
           createdAt:
             new Date().toISOString()
         }]);

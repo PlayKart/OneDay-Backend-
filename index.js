@@ -794,7 +794,129 @@ Make the user obsessed with self improvement and daily execution.
     });
   }
 });
+// ==============================
+// 🔄 RESET PROGRESS
+// ==============================
+app.post("/api/reset", verifyUser, async (req, res) => {
 
+  try {
+
+    const { uid } = req.user;
+
+    // Delete completions
+    const { error: completionsError } =
+      await supabase
+        .from("completions")
+        .delete()
+        .eq("userId", uid);
+
+    if (completionsError) {
+      throw completionsError;
+    }
+
+    // Reset user stats
+    const { error: userError } =
+      await supabase
+        .from("users")
+        .update({
+          xp: 0,
+          streak: 0,
+          level: 1,
+          levelProgress: 0,
+          freeze_until: null,
+          lastActiveDate: new Date().toISOString()
+        })
+        .eq("id", uid);
+
+    if (userError) {
+      throw userError;
+    }
+
+    return res.json({
+      success: true
+    });
+
+  } catch (error) {
+
+    console.error("RESET ERROR:");
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Reset failed"
+    });
+  }
+});
+
+// ==============================
+// 🗑️ DELETE ACCOUNT
+// ==============================
+app.delete("/api/account", verifyUser, async (req, res) => {
+
+  try {
+
+    const { uid } = req.user;
+
+    // Delete chats
+    const { error: chatsError } =
+      await supabase
+        .from("chats")
+        .delete()
+        .eq("user_id", uid);
+
+    if (chatsError) {
+      throw chatsError;
+    }
+
+    // Delete completions
+    const { error: completionsError } =
+      await supabase
+        .from("completions")
+        .delete()
+        .eq("userId", uid);
+
+    if (completionsError) {
+      throw completionsError;
+    }
+
+    // Delete habits
+    const { error: habitsError } =
+      await supabase
+        .from("habits")
+        .delete()
+        .eq("userId", uid);
+
+    if (habitsError) {
+      throw habitsError;
+    }
+
+    // Delete user
+    const { error: userError } =
+      await supabase
+        .from("users")
+        .delete()
+        .eq("id", uid);
+
+    if (userError) {
+      throw userError;
+    }
+
+    // Delete Firebase auth user
+    await admin.auth().deleteUser(uid);
+
+    return res.json({
+      success: true
+    });
+
+  } catch (error) {
+
+    console.error("DELETE ACCOUNT ERROR:");
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Delete account failed"
+    });
+  }
+});
 // ==============================
 // 🚀 START SERVER
 // ==============================

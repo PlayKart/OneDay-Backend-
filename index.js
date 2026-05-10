@@ -369,7 +369,6 @@ app.post("/api/habit", verifyUser, async (req, res) => {
 
     const { uid } = req.user;
 
-    // NEW FIELDS
     const {
       name,
       repeatType,
@@ -388,14 +387,14 @@ app.post("/api/habit", verifyUser, async (req, res) => {
         .from("habits")
         .insert([{
           userId: uid,
+
           name: name.trim(),
 
-          // NEW DATABASE FIELDS
-          repeat_type:
+          repeatType:
             repeatType || "every_day",
 
-          custom_days:
-            customDays || [],
+          customDays:
+            customDays || null,
 
           createdAt:
             new Date().toISOString()
@@ -556,6 +555,94 @@ app.post("/api/complete", verifyUser, async (req, res) => {
 
     return res.status(500).json({
       error: "Complete failed"
+    });
+  }
+});
+
+// ==============================
+// ❌ UNDO HABIT
+// ==============================
+app.post("/api/undo", verifyUser, async (req, res) => {
+
+  try {
+
+    const { uid } = req.user;
+    const { habit_id } = req.body;
+
+    if (!habit_id) {
+
+      return res.status(400).json({
+        error: "habit_id required"
+      });
+    }
+
+    const today = getTodayStr(req);
+
+    // ==============================
+    // DELETE COMPLETION
+    // ==============================
+    const { error: deleteError } =
+      await supabase
+        .from("completions")
+        .delete()
+        .eq("habitId", habit_id)
+        .eq("userId", uid)
+        .eq("date", today);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+
+    // ==============================
+    // FETCH USER
+    // ==============================
+    const {
+      data: user,
+      error: userError
+    } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", uid)
+      .single();
+
+    if (userError) {
+      throw userError;
+    }
+
+    // ==============================
+    // REMOVE XP
+    // ==============================
+    let xp =
+      Math.max(
+        0,
+        (user.xp || 0) - 10
+      );
+
+    const { error: updateError } =
+      await supabase
+        .from("users")
+        .update({
+          xp,
+          level: calculateLevel(xp),
+          levelProgress: xp % 100
+        })
+        .eq("id", uid);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    return res.json({
+      success: true
+    });
+
+  } catch (error) {
+
+    console.error("UNDO ERROR:");
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Undo failed"
     });
   }
 });

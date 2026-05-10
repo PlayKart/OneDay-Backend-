@@ -579,6 +579,31 @@ app.post("/api/undo", verifyUser, async (req, res) => {
     const today = getTodayStr(req);
 
     // ==============================
+    // CHECK IF COMPLETION EXISTS
+    // ==============================
+    const {
+      data: existingCompletion,
+      error: existingError
+    } = await supabase
+      .from("completions")
+      .select("*")
+      .eq("habitId", habit_id)
+      .eq("userId", uid)
+      .eq("date", today)
+      .maybeSingle();
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    if (!existingCompletion) {
+
+      return res.status(400).json({
+        error: "Habit not completed today"
+      });
+    }
+
+    // ==============================
     // DELETE COMPLETION
     // ==============================
     const { error: deleteError } =
@@ -592,6 +617,25 @@ app.post("/api/undo", verifyUser, async (req, res) => {
     if (deleteError) {
       throw deleteError;
     }
+
+    // ==============================
+    // CHECK REMAINING COMPLETIONS
+    // ==============================
+    const {
+      data: remainingCompletions,
+      error: remainingError
+    } = await supabase
+      .from("completions")
+      .select("id")
+      .eq("userId", uid)
+      .eq("date", today);
+
+    if (remainingError) {
+      throw remainingError;
+    }
+
+    const noHabitsLeftToday =
+      (remainingCompletions || []).length === 0;
 
     // ==============================
     // FETCH USER
@@ -610,7 +654,7 @@ app.post("/api/undo", verifyUser, async (req, res) => {
     }
 
     // ==============================
-    // REMOVE XP
+    // UPDATE XP + STREAK
     // ==============================
     let xp =
       Math.max(
@@ -618,11 +662,22 @@ app.post("/api/undo", verifyUser, async (req, res) => {
         (user.xp || 0) - 10
       );
 
+    let streak =
+      user.streak || 0;
+
+    // If last habit of the day was undone
+    if (noHabitsLeftToday) {
+
+      streak =
+        Math.max(0, streak - 1);
+    }
+
     const { error: updateError } =
       await supabase
         .from("users")
         .update({
           xp,
+          streak,
           level: calculateLevel(xp),
           levelProgress: xp % 100
         })

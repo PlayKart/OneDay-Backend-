@@ -418,6 +418,133 @@ app.post("/api/habit", verifyUser, async (req, res) => {
     });
   }
 });
+// ==============================
+// ✏️ UPDATE HABIT
+// ==============================
+app.put("/api/habit", verifyUser, async (req, res) => {
+
+  try {
+
+    const { uid } = req.user;
+
+    const {
+      habit_id,
+      name,
+      repeatType,
+      customDays,
+      difficulty,
+      notes
+    } = req.body;
+
+    if (!habit_id || !name) {
+
+      return res.status(400).json({
+        error: "Missing required fields"
+      });
+    }
+
+    const {
+      error
+    } = await supabase
+      .from("habits")
+      .update({
+
+        name: name,
+
+        repeat_type:
+          repeatType || "every_day",
+
+        custom_days:
+          customDays || [],
+
+        difficulty:
+          difficulty || "Medium",
+
+        notes:
+          notes || ""
+
+      })
+      .eq("id", habit_id)
+      .eq("userId", uid);
+
+    if (error) {
+      throw error;
+    }
+
+    return res.json({
+      success: true,
+      message:
+        "Habit updated successfully"
+    });
+
+  } catch (error) {
+
+    console.error("UPDATE HABIT ERROR:");
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Server Error"
+    });
+  }
+});
+
+// ==============================
+// 🗑️ DELETE HABIT
+// ==============================
+app.delete("/api/habit/:habit_id", verifyUser, async (req, res) => {
+
+  try {
+
+    const { uid } = req.user;
+
+    const habitId =
+      req.params.habit_id;
+
+    // ==============================
+    // DELETE COMPLETIONS FIRST
+    // ==============================
+    const {
+      error: completionsError
+    } = await supabase
+      .from("completions")
+      .delete()
+      .eq("habitId", habitId)
+      .eq("userId", uid);
+
+    if (completionsError) {
+      throw completionsError;
+    }
+
+    // ==============================
+    // DELETE HABIT
+    // ==============================
+    const {
+      error: habitError
+    } = await supabase
+      .from("habits")
+      .delete()
+      .eq("id", habitId)
+      .eq("userId", uid);
+
+    if (habitError) {
+      throw habitError;
+    }
+
+    return res.json({
+      success: true,
+      message: "Habit deleted"
+    });
+
+  } catch (error) {
+
+    console.error("DELETE HABIT ERROR:");
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Server Error"
+    });
+  }
+});
 
 // ==============================
 // ✅ COMPLETE HABIT

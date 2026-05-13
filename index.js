@@ -919,7 +919,7 @@ No emojis.
             method: "POST",
             headers: {
               Authorization:
-                \`Bearer \${process.env.OPENROUTER_API_KEY}\`,
+                `Bearer ${process.env.OPENROUTER_API_KEY}`,
               "Content-Type":
                 "application/json"
             },

@@ -969,6 +969,6 @@ const PORT =
 app.listen(PORT, () => {
 
   console.log(
-    \`OneDay backend running on port \${PORT}\`
+    `OneDay backend running on port ${PORT}`
   );
 });
